@@ -1,21 +1,41 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
-import { Maximize, Minus, Plus, TreePine } from "lucide-react"
-import { buildTree, layoutTree } from "@/lib/tree-data"
-import type { LeafType, PositionedLeaf } from "@/lib/types"
+import { useCallback, useMemo, useRef, useState } from "react"
+import { Maximize, Minus, Plus, Sprout, TreePine } from "lucide-react"
+import { addEvent, buildTree, layoutTree, type NewEventInput } from "@/lib/tree-data"
+import type { LeafType, PositionedLeaf, Tree } from "@/lib/types"
 import { TreeCanvas, type TreeCanvasHandle } from "./tree-canvas"
 import { StorySidebar } from "./story-sidebar"
 import { FilterBar } from "./filter-bar"
+import { AddEventForm } from "./add-event-form"
 
 export function TreeExplorer() {
-  const layout = useMemo(() => layoutTree(buildTree()), [])
+  const [tree, setTree] = useState<Tree>(() => buildTree())
+  const layout = useMemo(() => layoutTree(tree), [tree])
 
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null)
   const [hoveredLeaf, setHoveredLeaf] = useState<PositionedLeaf | null>(null)
   const [query, setQuery] = useState("")
   const [activeCategories, setActiveCategories] = useState<Set<LeafType>>(new Set())
+  const [isAdding, setIsAdding] = useState(false)
+  const [newLeafId, setNewLeafId] = useState<string | null>(null)
   const canvasRef = useRef<TreeCanvasHandle>(null)
+
+  const handleAddEvent = useCallback((input: NewEventInput) => {
+    setTree((prev) => {
+      const result = addEvent(prev, input)
+      // Focus the branch that grew, and mark the new leaf for its animation.
+      setSelectedBranchId(result.branchId)
+      setNewLeafId(result.leafId)
+      // Clear any active filter so the new leaf is never hidden.
+      setQuery("")
+      setActiveCategories(new Set())
+      window.setTimeout(() => {
+        setNewLeafId((current) => (current === result.leafId ? null : current))
+      }, 700)
+      return result.tree
+    })
+  }, [])
 
   const selectedBranch = useMemo(
     () => layout.branches.find((b) => b.id === selectedBranchId) ?? null,
@@ -63,6 +83,7 @@ export function TreeExplorer() {
           hoveredLeaf={hoveredLeaf}
           onHoverLeaf={setHoveredLeaf}
           matchedLeafIds={matchedLeafIds}
+          newLeafId={newLeafId}
         />
 
         {/* Hover tooltip */}
@@ -100,6 +121,20 @@ export function TreeExplorer() {
 
       {/* Sidebar */}
       <aside className="order-1 flex flex-col gap-4 lg:order-2 lg:h-full lg:overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setIsAdding((v) => !v)}
+          aria-expanded={isAdding}
+          className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card/50 px-4 py-2.5 text-sm font-medium transition hover:bg-card"
+        >
+          <Sprout className="size-4" aria-hidden="true" />
+          {isAdding ? "Hide the form" : "Add a moment"}
+        </button>
+
+        {isAdding && (
+          <AddEventForm tree={tree} onAddEvent={handleAddEvent} onClose={() => setIsAdding(false)} />
+        )}
+
         <FilterBar
           query={query}
           onQueryChange={setQuery}

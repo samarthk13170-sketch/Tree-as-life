@@ -5,7 +5,8 @@
 // component pans/zooms over these absolute coordinates.
 
 import { loadChapters } from "./datasets"
-import type { PositionedBranch, PositionedLeaf, Tree, TreeLayout } from "./types"
+import { CATEGORY_META } from "./categories"
+import type { Branch, Leaf, LeafType, PositionedBranch, PositionedLeaf, Tree, TreeLayout } from "./types"
 
 const TRUNK_X = 0
 const TRUNK_BASE_Y = 0
@@ -19,6 +20,88 @@ export function buildTree(): Tree {
 function jitter(seed: number) {
   const x = Math.sin(seed * 127.1) * 43758.5453
   return x - Math.floor(x)
+}
+
+// ---------- Dynamic events: add a leaf, growing the tree in real time ----------
+
+const UNIT_BY_TYPE: Record<LeafType, string> = {
+  music: "min",
+  movie: "★",
+  purchase: "₹",
+  travel: "₹",
+  note: "₹",
+}
+
+let dynamicSeq = 0
+function makeDynamicId(prefix: string) {
+  dynamicSeq += 1
+  return `${prefix}-${Date.now().toString(36)}-${dynamicSeq.toString(36)}`
+}
+
+// "__auto__" attaches to the first branch sharing the event's category,
+// creating a new branch only if none exists. "__new__" always forks a new
+// branch. Any other value is treated as an explicit target branch id.
+export const AUTO_TARGET = "__auto__"
+export const NEW_BRANCH_TARGET = "__new__"
+
+export interface NewEventInput {
+  type: LeafType
+  label: string
+  timestamp: string
+  value: number
+  target: string
+  newBranchTitle?: string
+}
+
+export interface AddEventResult {
+  tree: Tree
+  branchId: string
+  leafId: string
+  createdBranch: boolean
+}
+
+export function addEvent(tree: Tree, input: NewEventInput): AddEventResult {
+  const leaf: Leaf = {
+    id: makeDynamicId("evt"),
+    type: input.type,
+    label: input.label.trim() || "Untitled moment",
+    timestamp: input.timestamp,
+    value: Number.isFinite(input.value) ? input.value : 0,
+    unit: UNIT_BY_TYPE[input.type],
+  }
+
+  const branches = tree.branches.slice()
+
+  let targetIndex = -1
+  if (input.target === NEW_BRANCH_TARGET) {
+    targetIndex = -1
+  } else if (input.target === AUTO_TARGET) {
+    targetIndex = branches.findIndex((b) => b.category === input.type)
+  } else {
+    targetIndex = branches.findIndex((b) => b.id === input.target)
+  }
+
+  // Attach to an existing story.
+  if (targetIndex >= 0) {
+    const existing = branches[targetIndex]
+    branches[targetIndex] = { ...existing, leaves: [...existing.leaves, leaf] }
+    return { tree: { ...tree, branches }, branchId: existing.id, leafId: leaf.id, createdBranch: false }
+  }
+
+  // No matching story — grow a brand new branch.
+  const meta = CATEGORY_META[input.type]
+  const title = input.newBranchTitle?.trim() || `New ${meta.label} Chapter`
+  const newBranch: Branch = {
+    id: makeDynamicId("branch"),
+    title,
+    subtitle: "A chapter you started by hand",
+    story: `This chapter began the moment you added "${leaf.label}". It's a fresh branch on your tree — capture more moments like it and watch this story grow.`,
+    category: input.type,
+    color: meta.color,
+    leaves: [leaf],
+  }
+  branches.push(newBranch)
+  return { tree: { ...tree, branches }, branchId: newBranch.id, leafId: leaf.id, createdBranch: true }
 }
 
 export function layoutTree(tree: Tree): TreeLayout {

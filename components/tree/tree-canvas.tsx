@@ -24,6 +24,8 @@ interface TreeCanvasProps {
   onHoverLeaf: (leaf: PositionedLeaf | null) => void
   /** ids of leaves matching the active search/filter; null = no active query */
   matchedLeafIds: Set<string> | null
+  /** id of the most recently added leaf, to play its grow animation */
+  newLeafId?: string | null
 }
 
 const MIN_K = 0.4
@@ -37,6 +39,7 @@ export function TreeCanvas({
   hoveredLeaf,
   onHoverLeaf,
   matchedLeafIds,
+  newLeafId,
 }: TreeCanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [transform, setTransform] = useState<Transform>({ x: 0, y: 0, k: 1 })
@@ -255,6 +258,7 @@ export function TreeCanvas({
             const faded = branchDim || (hasQuery && !matched)
             const highlighted = hasQuery && matched
             const isHovered = hoveredLeaf?.id === leaf.id
+            const isNew = newLeafId === leaf.id
             return (
               <g
                 key={leaf.id}
@@ -279,10 +283,11 @@ export function TreeCanvas({
                   stroke={highlighted ? "oklch(0.98 0.05 100)" : "oklch(1 0 0 / 0.35)"}
                   strokeWidth={highlighted ? 2 : 1}
                   style={{
-                    filter: isHovered || highlighted ? `drop-shadow(0 0 10px ${branch.color})` : "none",
+                    filter:
+                      isHovered || highlighted || isNew ? `drop-shadow(0 0 10px ${branch.color})` : "none",
                     transition: "r 200ms ease, filter 200ms ease",
                   }}
-                  className={isHovered ? "leaf-shimmer" : undefined}
+                  className={isNew ? "leaf-grow" : isHovered ? "leaf-shimmer" : undefined}
                 />
               </g>
             )
